@@ -202,6 +202,7 @@ public class PickerViewLinkage extends LinearLayout {
                 @Override
                 public void onItemSelected(String item, int index) {
                     selectOneIndex = index;
+                    selectTwoIndex = 0;
                     returnData = new ReturnData();
                     returnData.setIndex(index);
                     returnData.setItem(item);
