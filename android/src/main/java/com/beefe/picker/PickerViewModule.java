@@ -3,16 +3,16 @@ package com.beefe.picker;
 import android.app.Activity;
 import android.app.Dialog;
 import android.graphics.Color;
-import android.graphics.PixelFormat;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
-import android.view.Window;
 import android.view.WindowManager;
+import android.widget.PopupWindow;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import com.beefe.picker.view.FixedPopupWindow;
 import com.beefe.picker.view.OnSelectedListener;
 import com.beefe.picker.view.PickerViewAlone;
 import com.beefe.picker.view.PickerViewLinkage;
@@ -35,41 +35,33 @@ import java.util.ArrayList;
 import static android.graphics.Color.argb;
 
 /**
- * Author: <a href="https://github.com/shexiaoheng">heng</a>
- * <p>
+ * Author: heng
  * Created by heng on 16/9/5.
- * <p>
  * Edited by heng on 16/9/22.
- * 1. PopupWindow height : full screen -> assignation
- * 2. Added pickerToolBarHeight support
- * <p>
+ * PopupWindow height : full screen -> assignation
+ * Added pickerToolBarHeight support
  * Edited by heng on 2016/10/19.
- * 1. Added weights support
- * 2. Fixed return data bug
- * <p>
+ * Added weights support
+ * Fixed return data bug
  * Edited by heng on 2016/11/16.
- * 1. Used WindowManager replace PopupWindow
- * 2. Removed method initOK() toggle() show() isPickerShow()
- * 3. Implements Application.ActivityLifecycleCallbacks
- * <p>
+ * Used WindowManager replace PopupWindow
+ * Removed method initOK() toggle() show() isPickerShow()
+ * Implements Application.ActivityLifecycleCallbacks
  * Edited by heng on 2016/11/17
- * 1. Used Dialog replace WindowManger
- * 2. Restore method show() isPickerShow()
- * <p>
+ * Used Dialog replace WindowManger
+ * Restore method show() isPickerShow()
  * Edited by heng on 2016/12/23
- * 1. Changed returnData type
- * 2. Added pickerToolBarFontSize
- * <p>
+ * Changed returnData type
+ * Added pickerToolBarFontSize
  * Edited by heng on 2016/12/26
- * 1. Fixed returnData bug
- * 2. Added pickerFontColor
- * 3. Added pickerFontSize
- * 4. Used LifecycleEventListener replace Application.ActivityLifecycleCallbacks
- * 5. Fixed other bug
- *
+ * Fixed returnData bug
+ * Added pickerFontColor
+ * Added pickerFontSize
+ * Used LifecycleEventListener replace Application.ActivityLifecycleCallbacks
+ * Fixed other bug
  * Edited by heng on 2017/01/17
- * 1. Added select(ReadableArray array, Callback callback)
- * 2. Optimization code
+ * Added select(ReadableArray array, Callback callback)
+ * Optimization code
  */
 
 public class PickerViewModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
@@ -109,6 +101,8 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     private static final String ERROR_NOT_INIT = "please initialize the component first";
 
     private Dialog dialog = null;
+    private PopupWindow popupWindow = null;
+    private View mParentView = null;
 
     private boolean isLoop = true;
 
@@ -139,6 +133,9 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     public void _init(ReadableMap options) {
         Activity activity = getCurrentActivity();
         if (activity != null && options.hasKey(PICKER_DATA)) {
+            if (mParentView == null) {
+                mParentView = activity.getWindow().getDecorView();
+            }
             View view = activity.getLayoutInflater().inflate(R.layout.picker_view, null);
             RelativeLayout barLayout = (RelativeLayout) view.findViewById(R.id.barLayout);
             TextView cancelTV = (TextView) view.findViewById(R.id.cancel);
@@ -343,24 +340,16 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
             }
 
             int height = barViewHeight + pickerViewHeight;
-            if (dialog == null) {
-                dialog = new Dialog(activity, R.style.Dialog_Full_Screen);
-                dialog.setContentView(view);
-                WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams();
-                Window window = dialog.getWindow();
-                if (window != null) {
-                    layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-                    layoutParams.type = WindowManager.LayoutParams.TYPE_TOAST;
-                    layoutParams.format = PixelFormat.TRANSPARENT;
-                    layoutParams.windowAnimations = R.style.PickerAnim;
-                    layoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
-                    layoutParams.height = height;
-                    layoutParams.gravity = Gravity.BOTTOM;
-                    window.setAttributes(layoutParams);
-                }
+            if (popupWindow == null) {
+                int width = WindowManager.LayoutParams.MATCH_PARENT;
+
+                popupWindow = new FixedPopupWindow(view, width, height);
+                popupWindow.setAnimationStyle(R.style.PickerAnim);
+                popupWindow.setFocusable(false);
+                popupWindow.setOutsideTouchable(true);
             } else {
-                dialog.dismiss();
-                dialog.setContentView(view);
+                popupWindow.dismiss();
+                popupWindow.setContentView(view);
             }
         }
     }
@@ -379,21 +368,25 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
 
     @ReactMethod
     public void show() {
-        if (dialog == null) {
+        if (popupWindow == null) {
             return;
         }
-        if (!dialog.isShowing()) {
-            dialog.show();
+
+        if (!popupWindow.isShowing()) {
+            popupWindow.showAtLocation(mParentView, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0);
+        } else {
+            popupWindow.update();
         }
     }
 
     @ReactMethod
     public void hide() {
-        if (dialog == null) {
+        if (popupWindow == null) {
             return;
         }
-        if (dialog.isShowing()) {
-            dialog.dismiss();
+
+        if (popupWindow.isShowing()) {
+            popupWindow.dismiss();
         }
     }
 
@@ -401,10 +394,10 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     public void isPickerShow(Callback callback) {
         if (callback == null)
             return;
-        if (dialog == null) {
+        if (popupWindow == null) {
             callback.invoke(ERROR_NOT_INIT);
         } else {
-            callback.invoke(null, dialog.isShowing());
+            callback.invoke(null, popupWindow.isShowing());
         }
     }
 
@@ -493,11 +486,13 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     public void onHostPause() {
         hide();
         dialog = null;
+        popupWindow = null;
     }
 
     @Override
     public void onHostDestroy() {
         hide();
         dialog = null;
+        popupWindow = null;
     }
 }
